@@ -1,3 +1,6 @@
 <Solution>
-  <Project Path="Client.csproj" />
+  <Project Path="../MessageDTO/MessageDTO.csproj" Id="08484bd4-d849-41c1-9414-917250be03f6" />
+  <Project Path="Client.csproj">
+    <BuildDependency Project="../MessageDTO/MessageDTO.csproj" />
+  </Project>
 </Solution>

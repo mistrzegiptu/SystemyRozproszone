@@ -1,10 +1,12 @@
 ﻿using System.Configuration;
 using System.Net;
-using System.Net.Sockets;
 using System.Text;
 
+Console.OutputEncoding = Encoding.UTF8;
+Console.InputEncoding = Encoding.UTF8;
+
 Console.Write("Input your nickname: ");
-var nickname = Console.ReadLine();
+var nickname = Console.ReadLine() ?? string.Empty;
 
 if (!IPAddress.TryParse(ConfigurationManager.AppSettings["ServerIP"], out var ipAddress))
     throw new ConfigurationErrorsException();
@@ -14,30 +16,19 @@ if(!int.TryParse(ConfigurationManager.AppSettings["ServerPort"], out var port))
 
 IPEndPoint ipEndPoint = new(ipAddress, port);
 
-using Socket client = new(ipEndPoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+using var client = new Client(ipEndPoint);
 
-client.Connect(ipEndPoint);
-
-try
+if(await client.InitAsync(nickname))
 {
-    while (true)
-    {
-        Console.Write("Enter message (EXIT to leave): ");
-        var message = Console.ReadLine();
+    var printer = new ClientConsolePrinter(client);
+    var reader = new ClientConsoleReader(client);
 
-        if (string.IsNullOrEmpty(message) || message == "EXIT")
-            break;
+    var printTcpTask = Task.Run(() => printer.ListenTcpAsync());
+    var printUdpTask = Task.Run(() => printer.ListenUdpAsync());
 
-        var messageBytes = Encoding.UTF8.GetBytes(message);
-
-        client.Send(messageBytes, SocketFlags.None);
-    }
+    await reader.StartReadingAsync();
 }
-catch(Exception ex)
+else
 {
-    Console.WriteLine(ex.ToString());
-}
-finally
-{
-    client.Shutdown(SocketShutdown.Both);
+    Console.WriteLine("Failed to connect");
 }
