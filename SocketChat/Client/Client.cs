@@ -5,12 +5,17 @@ using System.Text;
 
 internal class Client : IDisposable
 {
+    private const int HandshakeSize = 4;
+    private const int BufferSize = 1024;
+
     private IPEndPoint _endPoint;
     private Socket _tcpSocket;
     private Socket _udpSocket;
-    private string _nickname;
+    private string _nickname = string.Empty;
 
     public int ClientId { get; private set; }
+
+    private bool _isDisposed = false;
 
     public Client(IPEndPoint endPoint)
     {
@@ -30,49 +35,44 @@ internal class Client : IDisposable
             byte[] nicknameBytes = Encoding.UTF8.GetBytes(_nickname);
             await _tcpSocket.SendAsync(nicknameBytes, SocketFlags.None);
 
-            byte[] ackBuffer = new byte[4];
+            byte[] ackBuffer = new byte[HandshakeSize];
             int bytesRead = await _tcpSocket.ReceiveAsync(ackBuffer, SocketFlags.None);
 
-            if(bytesRead == 4)
+            if(bytesRead != HandshakeSize)
             {
-                var responseId = BitConverter.ToInt32(ackBuffer);
-
-                if(responseId >= 0)
-                {
-                    ClientId = responseId;
-
-                    _udpSocket.Connect(_endPoint);
-
-                    byte[] udpHello = BitConverter.GetBytes(ClientId);
-                    await _udpSocket.SendAsync(udpHello, SocketFlags.None);
-
-                    return true;
-                }
-                else
-                {
-                    Console.WriteLine("Nickname already in use");
-                    return false;
-                }
+                Console.WriteLine("Invalid handshake size");
+                return false;
             }
-            else
+            
+            var responseId = BitConverter.ToInt32(ackBuffer);
+
+            if (responseId < 0)
             {
-                Console.WriteLine("Failed to init");
+                Console.WriteLine("Nickname already in use");
+                return false;
             }
 
+            ClientId = responseId;
+
+            _udpSocket.Connect(_endPoint);
+
+            byte[] udpHello = BitConverter.GetBytes(ClientId);
+            await _udpSocket.SendAsync(udpHello, SocketFlags.None);
+
+            return true;
         }
         catch (Exception ex)
         {
-            Console.WriteLine(ex.Message);
+            Console.WriteLine(ex.Message); 
+            return false;
         }
-
-        return false;
     }
 
     public async Task SendAsyncTcp(string message)
     {
         try
         {
-            TcpMessage messageDTO = new() { ClientNickname = _nickname, ClientId = ClientId, Message = message };
+            TcpMessage messageDTO = new() { ClientNickname = _nickname ?? string.Empty, ClientId = ClientId, Message = message };
 
             await _tcpSocket.SendAsync(messageDTO.GetBytes(), SocketFlags.None);
         }
@@ -86,8 +86,11 @@ internal class Client : IDisposable
     {
         try
         {
-            byte[] receiveBuffer = new byte[1024];
+            byte[] receiveBuffer = new byte[BufferSize];
             var bytesReceived = await _tcpSocket.ReceiveAsync(receiveBuffer, SocketFlags.None);
+
+            if (bytesReceived == 0) 
+                return null;
 
             var messageDTO = TcpMessage.Parse(receiveBuffer[..bytesReceived]);
 
@@ -96,12 +99,11 @@ internal class Client : IDisposable
         catch (Exception ex)
         {
             Console.WriteLine(ex.Message);
+            return null;
         }
-
-        return null;
     }
 
-    public async Task SendAsyncUdp(string message, List<int> targetIds = null)
+    public async Task SendAsyncUdp(string message, List<int>? targetIds = null)
     {
         try
         {
@@ -119,7 +121,7 @@ internal class Client : IDisposable
     {
         try
         {
-            byte[] receiveBuffer = new byte[1024];
+            byte[] receiveBuffer = new byte[BufferSize];
             var bytesReceived = await _udpSocket.ReceiveAsync(receiveBuffer, SocketFlags.None);
 
             var messageDTO = UdpMessage.Parse(receiveBuffer[..bytesReceived]);
@@ -129,13 +131,15 @@ internal class Client : IDisposable
         catch (Exception ex)
         {
             Console.WriteLine(ex.Message);
+            return null;
         }
-
-        return null;
     }
 
     public void Dispose()
     {
+        if (_isDisposed)
+            return;
+
         if(_tcpSocket.Connected)
         {
             try
@@ -147,5 +151,7 @@ internal class Client : IDisposable
 
         _tcpSocket?.Dispose();
         _udpSocket?.Dispose();
+
+        _isDisposed = true;
     }
 }

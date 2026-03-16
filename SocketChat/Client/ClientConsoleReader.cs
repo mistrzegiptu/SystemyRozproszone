@@ -11,7 +11,7 @@ internal class ClientConsoleReader
 
     public async Task StartReadingAsync()
     {
-        Console.WriteLine("Connected. (T {message} to chat, U [sus/lenny/flip/nyan] to send image, M [ASCII_OPTIONS] {ids eg. 1 2 3} to send multicast, E to leave)");
+        Console.WriteLine("Connected. (T {message} to chat, U [sus/lenny/flip/nyan] to send image, M [sus/lenny/flip/nyan] {ids eg. 1 2 3} to send multicast, E to leave)");
 
         while(true)
         {
@@ -25,6 +25,7 @@ internal class ClientConsoleReader
             {
                 case "T":
                     await _client.SendAsyncTcp(splittedInput[1]);
+
                     break;
                 case "U":
                     var asciiArt = AsciiUtils.Create(splittedInput[1]);

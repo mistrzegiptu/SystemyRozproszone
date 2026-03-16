@@ -7,11 +7,15 @@ using System.Text;
 
 internal class ChatServer
 {
+    private const int BufferSize = 1024;
+    private const int HandshakeSize = 4;
+    private const int NickBufferSize = 256;
+
     private readonly Socket _tcpListener;
     private readonly Socket _udpListener;
 
     private ConcurrentDictionary<int, ConnectedClient> _connectedClients = [];
-    private int _nextClientId;
+    private int _nextClientId = 0;
 
     public ChatServer(IPEndPoint endPoint)
     {
@@ -39,9 +43,11 @@ internal class ChatServer
 
     private async Task HandleTcpClientAsync(Socket clientSocket)
     {
+        int clientId = 0;
+
         try
         {
-            byte[] nicknameBuffer = new byte[256];
+            byte[] nicknameBuffer = new byte[NickBufferSize];
             int bytesReaded = await clientSocket.ReceiveAsync(nicknameBuffer, SocketFlags.None);
 
             if (bytesReaded == 0)
@@ -57,17 +63,16 @@ internal class ChatServer
                 return;
             }
 
-            int newClientId = _nextClientId;
-            _nextClientId++;
+            clientId = Interlocked.Increment(ref _nextClientId);
 
-            await clientSocket.SendAsync(BitConverter.GetBytes(newClientId), SocketFlags.None);
+            await clientSocket.SendAsync(BitConverter.GetBytes(clientId), SocketFlags.None);
 
-            var newClient = new ConnectedClient { Id = newClientId, Nickname = nickname, Socket = clientSocket };
-            _connectedClients.TryAdd(newClientId, newClient);
+            var newClient = new ConnectedClient { Id = clientId, Nickname = nickname, Socket = clientSocket };
+            _connectedClients.TryAdd(clientId, newClient);
 
-            Console.WriteLine($"{nickname} ({newClientId}) joined the chat!");
+            Console.WriteLine($"{nickname} ({clientId}) joined the chat!");
 
-            byte[] receiveBuffer = new byte[1024];
+            byte[] receiveBuffer = new byte[BufferSize];
             while(true)
             {
                 bytesReaded = await clientSocket.ReceiveAsync(receiveBuffer, SocketFlags.None);
@@ -77,7 +82,7 @@ internal class ChatServer
 
                 byte[] actualMessage = receiveBuffer[..bytesReaded];
 
-                await BroadcastTcpAsync(actualMessage, newClientId);
+                await BroadcastTcpAsync(actualMessage, clientId);
             }
         }
         catch(Exception ex)
@@ -87,6 +92,9 @@ internal class ChatServer
         finally
         {
             clientSocket.Close();
+
+            if(clientId != 0)
+                _connectedClients.TryRemove(clientId, out _);
         }
     }
 
@@ -106,7 +114,7 @@ internal class ChatServer
 
     private async Task ListenForUdpAsync()
     {
-        byte[] buffer = new byte[1024];
+        byte[] buffer = new byte[BufferSize];
 
         EndPoint clientEndPoint = new IPEndPoint(IPAddress.Any, 0);
 
@@ -117,7 +125,7 @@ internal class ChatServer
                 var result = await _udpListener.ReceiveFromAsync(buffer, SocketFlags.None, clientEndPoint);
                 byte[] receivedMessage = buffer[..result.ReceivedBytes];
 
-                if(result.ReceivedBytes == 4)
+                if(result.ReceivedBytes == HandshakeSize)
                 {
                     int clientId = BitConverter.ToInt32(receivedMessage);
 
