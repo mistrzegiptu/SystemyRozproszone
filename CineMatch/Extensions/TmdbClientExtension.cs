@@ -16,6 +16,9 @@ namespace CineMatch.Extensions
             var baseUrl = configuration["ExternalApis:TmdbBaseUrl"];
             var token = configuration["ExternalApis:TmdbToken"];
 
+            if (string.IsNullOrEmpty(baseUrl))
+                throw new ArgumentException();
+
             client.BaseAddress = new Uri(baseUrl);
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));

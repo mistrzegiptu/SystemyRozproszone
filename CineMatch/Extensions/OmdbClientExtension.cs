@@ -23,6 +23,9 @@
         {
             var baseUrl = configuration["ExternalApis:OmdbBaseUrl"];
 
+            if (string.IsNullOrEmpty(baseUrl))
+                throw new ArgumentNullException();
+
             client.BaseAddress = new Uri(baseUrl);
         }
     }

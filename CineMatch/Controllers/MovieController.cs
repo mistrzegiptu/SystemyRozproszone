@@ -1,75 +1,96 @@
-﻿using CineMatch.Models;
+﻿using CineMatch.Attributes;
+using CineMatch.Models;
+using CineMatch.Services;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace CineMatch.Controllers
 {
     [Route("movies")]
+    [ApiController]
+    [EnableRateLimiting("Fixed")]
+    [ApiKey]
     public class MovieController : ControllerBase
     {
-        private HttpClient _tmdbClient;
-        private HttpClient _omdbClient;
+        private IMovieApiService _movieService;
 
-        public MovieController(IHttpClientFactory httpClientFactory)
+        public MovieController(IMovieApiService movieService)
         {
-            _tmdbClient = httpClientFactory.CreateClient("TmdbClient");
-            _omdbClient = httpClientFactory.CreateClient("OmdbClient");
+            _movieService = movieService;
         }
 
         [HttpGet("discover")]
-        public async Task<IActionResult> DiscoverMovies([FromQuery] int? year, [FromQuery] string genreId, [FromQuery] int limit = 3)
+        public async Task<IActionResult> DiscoverMovies([FromQuery] MovieDiscoverRq request)
         {
-            int searchYear = year ?? DateTime.Now.Year;
-
             var queryParams = new Dictionary<string, string?>
             {
-                ["with_genres"] = genreId,
-                ["primary_release_year"] = searchYear.ToString(),
-                ["sort_by"] = "popularity.desc",
+                ["with_genres"] = ((int)request.Genre).ToString(),
+                ["primary_release_year"] = request.Year.ToString(),
+                ["sort_by"] = "vote_average.desc",
+                ["vote_count.gte"] = "500",
                 ["language"] = "pl-PL"
             };
-            string url = QueryHelpers.AddQueryString("discover/movie", queryParams);
 
-            var tmdbResponse = await _tmdbClient.GetAsync(url);
-
-            if (!tmdbResponse.IsSuccessStatusCode)
-                return StatusCode(500, "TMDB API Error");
-
-            var tmdbData = await tmdbResponse.Content.ReadFromJsonAsync<TmdbPagedResponse>();
+            var tmdbData = await _movieService.GetDiscoverMoviesAsync(queryParams);
 
             if (tmdbData?.Results == null || !tmdbData.Results.Any())
                 return NotFound("No movies found");
 
             var responseMovieList = new List<MovieResponseDto>();
-            foreach(var movie in tmdbData.Results.Take(limit))
+            foreach(var movie in tmdbData.Results.Take(request.Limit))
             {
-                var rating = await GetOmdbRating(movie.Title, searchYear);
-                responseMovieList.Add(new MovieResponseDto(movie.Title, movie.Id, rating));
+                var omdbRatingParams = new Dictionary<string, string?>
+                {
+                    ["t"] = movie.OriginalTitle,
+                    ["y"] = request.Year.ToString()
+                };
+
+                var rating = await _movieService.GetOmdbRatingAsync(omdbRatingParams);
+                responseMovieList.Add(new MovieResponseDto(movie.Title, movie.Id, rating, request.Year.ToString()));
             }
 
             return Ok(responseMovieList);
         }
 
-        private async Task<string> GetOmdbRating(string title, int releaseYear)
+        [HttpGet("random")]
+        public async Task<IActionResult> GetRandomMovie()
         {
-            var omdbParams = new Dictionary<string, string?>
+            var randomPage = Random.Shared.Next(1, 501);
+
+            var queryParams = new Dictionary<string, string?>
             {
-                ["t"] = title,
-                ["y"] = releaseYear.ToString()
+                ["page"] = randomPage.ToString(),
+                ["sort_by"] = "vote_average.desc",
+                ["vote_count.gte"] = "500",
+                ["language"] = "pl-PL"
             };
 
-            string omdbUrl = QueryHelpers.AddQueryString("", omdbParams);
-            var omdbResponse = await _omdbClient.GetAsync(omdbUrl);
+            var tmdbData = await _movieService.GetDiscoverMoviesAsync(queryParams);
 
-            if (!omdbResponse.IsSuccessStatusCode)
-                return string.Empty;
+            if (tmdbData?.Results == null || !tmdbData.Results.Any())
+                return NotFound("No movies found");
 
-            var omdbData = await omdbResponse.Content.ReadFromJsonAsync<OmdbMovieResponse>();
+            var randomMovieIndex = Random.Shared.Next(0, tmdbData.Results.Count);
+            var randomMovie = tmdbData.Results[randomMovieIndex];
 
-            if (omdbData?.ReponseStatus != "True" || string.IsNullOrEmpty(omdbData.ImdbRating))
-                return string.Empty;
+            int movieYear = 0;
+            if (!string.IsNullOrEmpty(randomMovie.ReleaseDate) && randomMovie.ReleaseDate.Length >= 4)
+            {
+                var year = randomMovie.ReleaseDate.Substring(0, 4);
+                int.TryParse(year, out movieYear);
+            }
 
-            return omdbData.ImdbRating;
+            var omdbRatingParams = new Dictionary<string, string?>
+            {
+                ["t"] = randomMovie.OriginalTitle,
+                ["y"] = movieYear.ToString()
+            };
+
+            var rating = await _movieService.GetOmdbRatingAsync(omdbRatingParams);
+
+            var responseMovie = new MovieResponseDto(randomMovie.Title, randomMovie.Id, rating.ToString(), movieYear.ToString());
+
+            return Ok(responseMovie);
         }
     }
 }

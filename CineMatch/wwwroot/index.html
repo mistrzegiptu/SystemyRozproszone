@@ -1,0 +1,173 @@
+﻿<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>CineMatch - Asystent Filmowy</title>
+</head>
+<body style="font-family: Arial, sans-serif; padding: 20px;">
+
+    <h1>CineMatch</h1>
+
+    <div style="background-color: #f8d7da; padding: 10px; margin-bottom: 20px; border-radius: 5px;">
+        <label for="apiKeyInput"><strong>Wprowadź klucz dostępu do API:</strong></label>
+        <input type="password" id="apiKeyInput" placeholder="Wklej klucz tutaj..." style="width: 300px;">
+    </div>
+
+    <fieldset style="margin-bottom: 20px;">
+        <legend>Szukaj filmów po gatunku i roku (TMDB + OMDb)</legend>
+        <form id="discoverForm">
+            <label for="year">Rok premiery:</label>
+            <input type="number" id="year" name="year" value="2023" required>
+
+            <label for="genre">Gatunek:</label>
+            <select id="genre" name="genre">
+                <option value="Action">Akcja</option>
+                <option value="Comedy">Komedia</option>
+                <option value="SciFi">Sci-Fi</option>
+                <option value="Horror">Horror</option>
+            </select>
+
+            <button type="submit">Szukaj filmów</button>
+        </form>
+    </fieldset>
+
+    <fieldset style="margin-bottom: 20px;">
+        <legend>Szukaj top filmów aktora</legend>
+        <form id="actorForm">
+            <label for="fullName">Imię i nazwisko:</label>
+            <input type="text" id="fullName" name="fullName" placeholder="np. Keanu Reeves" required>
+
+            <button type="submit">Szukaj aktora</button>
+        </form>
+    </fieldset>
+
+    <fieldset style="margin-bottom: 20px;">
+        <legend>Nie wiesz co obejrzeć?</legend>
+        <button id="randomMovieBtn" style="padding: 10px 20px; font-weight: bold; cursor: pointer;">
+            Wylosuj film na wieczór
+        </button>
+    </fieldset>
+
+    <hr>
+
+    <h2>Wyniki wyszukiwania:</h2>
+    <div id="loading" style="display: none; color: gray;">Ładowanie danych z API...</div>
+    <ul id="resultsList">
+        <li>Tutaj pojawią się filmy...</li>
+    </ul>
+
+    <script>
+        const API_BASE_URL = "";
+
+        const resultsList = document.getElementById('resultsList');
+        const loading = document.getElementById('loading');
+        const randomMovieBtn = document.getElementById('randomMovieBtn');
+
+        function displayMovies(movies) {
+            resultsList.innerHTML = '';
+            loading.style.display = 'none';
+
+            if (!movies || movies.length === 0) {
+                resultsList.innerHTML = '<li>Nie znaleziono filmów.</li>';
+                return;
+            }
+
+            movies.forEach(movie => {
+                const li = document.createElement('li');
+                const tmdbUrl = `https://www.themoviedb.org/movie/${movie.tmdbId}`;
+
+                li.innerHTML = `
+                            <strong>${movie.title}</strong>
+                            (Ocena IMDb: ${movie.imdbRating})
+                            - <a href="${tmdbUrl}" target="_blank" rel="noopener noreferrer">Zobacz na TMDB</a>
+                            `;
+
+                resultsList.appendChild(li);
+            });
+        }
+
+        function handleResponseErrors(response) {
+            if (response.status === 401) throw new Error("Brak dostępu: Nieprawidłowy lub brakujący klucz API!");
+            if (response.status === 429) throw new Error("Zbyt wiele zapytań! Odczekaj chwilę i spróbuj ponownie.");
+            if (response.status === 400) throw new Error("Błędne dane. Sprawdź poprawność wprowadzonych informacji.");
+            if (response.status === 404) throw new Error("Nie znaleziono żadnych wyników.");
+            if (!response.ok) throw new Error("Błąd serwera. Spróbuj ponownie później.");
+            return response.json();
+        }
+
+        document.getElementById('discoverForm').addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            const apiKey = document.getElementById('apiKeyInput').value;
+            if (!apiKey) {
+                alert("Najpierw podaj klucz API na górze strony!");
+                return;
+            }
+
+            loading.style.display = 'block';
+            resultsList.innerHTML = '';
+
+            const year = document.getElementById('year').value;
+            const genre = document.getElementById('genre').value;
+
+            fetch(`${API_BASE_URL}/movies/discover?Year=${year}&Genre=${genre}`, {
+                headers: { 'X-Api-Key': apiKey }
+            })
+                .then(handleResponseErrors)
+                .then(data => displayMovies(data))
+                .catch(error => {
+                    loading.style.display = 'none';
+                    resultsList.innerHTML = `<li style="color:red;">${error.message}</li>`;
+                });
+        });
+
+        document.getElementById('actorForm').addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            const apiKey = document.getElementById('apiKeyInput').value;
+            if (!apiKey) {
+                alert("Najpierw podaj klucz API na górze strony!");
+                return;
+            }
+
+            loading.style.display = 'block';
+            resultsList.innerHTML = '';
+
+            const fullName = document.getElementById('fullName').value;
+
+            fetch(`${API_BASE_URL}/actors/top-films?fullName=${encodeURIComponent(fullName)}`, {
+                headers: { 'X-Api-Key': apiKey }
+            })
+                .then(handleResponseErrors)
+                .then(data => displayMovies(data))
+                .catch(error => {
+                    loading.style.display = 'none';
+                    resultsList.innerHTML = `<li style="color:red;">${error.message}</li>`;
+                });
+        });
+
+        randomMovieBtn.addEventListener('click', function () {
+            const apiKey = document.getElementById('apiKeyInput').value;
+            if (!apiKey) {
+                alert("Najpierw podaj klucz API na górze strony!");
+                return;
+            }
+
+            loading.style.display = 'block';
+            resultsList.innerHTML = '';
+
+            fetch(`${API_BASE_URL}/movies/random`, {
+                headers: { 'X-Api-Key': apiKey }
+            })
+                .then(handleResponseErrors)
+                .then(data => {
+                    displayMovies([data]);
+                })
+                .catch(error => {
+                    loading.style.display = 'none';
+                    resultsList.innerHTML = `<li style="color:red;">${error.message}</li>`;
+                });
+        });
+    </script>
+</body>
+</html>
