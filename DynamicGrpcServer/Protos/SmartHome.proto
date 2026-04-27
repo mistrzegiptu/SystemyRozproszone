@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+option csharp_namespace = "DynamicGrpcServer";
+
+package smarthome;
+
+service SmartHome {
+  rpc ToggleAllLights (LightsRequest) returns (LightsResponse);
+
+  rpc GetDevicesStatusInRoom (RoomStatusRequest) returns (RoomStatusResponse);
+
+  rpc MonitorTemperatureSensor (TemperatureSensorRequest) returns (stream TemperatureSensorReading);
+}
+
+message LightsRequest {
+  bool turnOn = 1;
+}
+
+message LightsResponse {
+  int32 statusCode = 1;
+}
+
+message RoomStatusRequest {
+  string roomName = 1;
+}
+
+message DeviceStatus {
+	int32 deviceId = 1;
+	string deviceName = 2;
+	bool isHealthy = 3;
+}
+
+message RoomStatusResponse {
+  repeated DeviceStatus devices = 1;
+}
+
+message TemperatureSensorRequest {
+  int32 sensorId = 1;
+}
+
+message TemperatureSensorReading {
+  string timestamp = 1;
+  float temperature = 2;
+}
