@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="SpaceSystem.Admin/SpaceSystem.Admin.csproj" />
+  <Project Path="SpaceSystem.Agency/SpaceSystem.Agency.csproj" />
+  <Project Path="SpaceSystem.Carrier/SpaceSystem.Carrier.csproj" />
+  <Project Path="SpaceSystem.Shared/SpaceSystem.Shared.csproj" />
+</Solution>
